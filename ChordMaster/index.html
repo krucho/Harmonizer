@@ -1,0 +1,935 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nopia-like MIDI Bridge</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b0f;
+      --panel: #11151d;
+      --panel-2: #151b24;
+      --line: #273140;
+      --line-strong: #3f4b5f;
+      --text: #eef2f7;
+      --muted: #93a0b4;
+      --dim: #657288;
+      --accent: #74e0c7;
+      --accent-2: #f3c969;
+      --danger: #ff6b7a;
+      --ok: #68d391;
+      --shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+      --radius: 8px;
+      --mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: "Aptos", "Segoe UI", Candara, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(116, 224, 199, 0.11), transparent 32rem),
+        linear-gradient(145deg, #090b0f 0%, #10131a 48%, #08090d 100%);
+      color: var(--text);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #171d27;
+      color: var(--text);
+      min-height: 38px;
+      cursor: pointer;
+      transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button.primary {
+      background: linear-gradient(180deg, #1f6f65, #174f49);
+      border-color: #3fb9a6;
+    }
+
+    button.danger {
+      background: #341820;
+      border-color: #7c2e3c;
+      color: #ffd5da;
+    }
+
+    button.ghost {
+      background: transparent;
+    }
+
+    button.active,
+    .toggle input:checked + span {
+      border-color: var(--accent);
+      background: rgba(116, 224, 199, 0.14);
+      color: var(--accent);
+    }
+
+    select,
+    input[type="number"],
+    input[type="range"] {
+      width: 100%;
+    }
+
+    select,
+    input[type="number"] {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #0c1017;
+      color: var(--text);
+      padding: 0 10px;
+      outline: none;
+    }
+
+    input[type="range"] {
+      accent-color: var(--accent);
+    }
+
+    .app {
+      width: min(1480px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 18px 0 24px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 16px;
+      min-height: 74px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.35rem, 2.2vw, 2rem);
+      font-weight: 750;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(17, 21, 29, 0.85);
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+    }
+
+    .badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 16px rgba(255, 107, 122, 0.8);
+    }
+
+    .badge.connected::before {
+      background: var(--ok);
+      box-shadow: 0 0 16px rgba(104, 211, 145, 0.8);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 320px;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(17, 21, 29, 0.92);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .section {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section:last-child {
+      border-bottom: 0;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      color: var(--accent-2);
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+
+    .field:last-child {
+      margin-bottom: 0;
+    }
+
+    .field label,
+    .range-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .value {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .button-row.three {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .toggle-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .toggle input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .toggle span {
+      display: grid;
+      place-items: center;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #0c1017;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.85rem;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 14px;
+    }
+
+    .play-zones {
+      display: grid;
+      gap: 14px;
+    }
+
+    .zone {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--panel-2);
+    }
+
+    .zone-pads {
+      border-color: rgba(243, 201, 105, 0.35);
+    }
+
+    .zone-keys {
+      border-color: rgba(116, 224, 199, 0.35);
+    }
+
+    .zone-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 0.82rem;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .zone-title span:last-child {
+      font-size: 0.72rem;
+      font-weight: 500;
+      text-transform: none;
+      color: var(--dim);
+    }
+
+    .pad-section {
+      margin-bottom: 12px;
+    }
+
+    .pad-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .pad-section-label {
+      font-size: 0.72rem;
+      color: var(--dim);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .pads {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .pads.keys-grid {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .pad {
+      min-height: 84px;
+      padding: 10px;
+      text-align: left;
+      background: linear-gradient(180deg, #18202b, #10161f);
+      border-color: #303a4a;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pad.drum-pad {
+      border-color: rgba(243, 201, 105, 0.45);
+      background: linear-gradient(180deg, #221e14, #14120e);
+    }
+
+    .pad.drum-pad.active::after {
+      background: var(--accent-2);
+      box-shadow: 0 0 18px rgba(243, 201, 105, 0.75);
+    }
+
+    .pad.bass-pad {
+      border-color: rgba(116, 224, 199, 0.35);
+      background: linear-gradient(180deg, #142220, #0f1618);
+    }
+
+    .looper-bar {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .looper-track {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 8px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .looper-track.armed {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .looper-track.has-data {
+      background: rgba(116, 224, 199, 0.08);
+    }
+
+    .pad::after {
+      content: "";
+      position: absolute;
+      inset: auto 10px 10px auto;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--line-strong);
+    }
+
+    .pad.active::after {
+      background: var(--accent);
+      box-shadow: 0 0 18px rgba(116, 224, 199, 0.8);
+    }
+
+    .pad .pad-label {
+      display: block;
+      font-size: 1.1rem;
+      font-weight: 750;
+      color: var(--text);
+    }
+
+    .pad .pad-role {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.25;
+    }
+
+    .chord-display {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .chord-display.triple {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .readout {
+      min-height: 92px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #0c1017;
+      padding: 12px;
+    }
+
+    .readout .label {
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+    }
+
+    .readout .main {
+      margin-top: 8px;
+      font-size: 1.35rem;
+      font-weight: 760;
+    }
+
+    .readout .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 0.84rem;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    .monitor {
+      grid-column: 1 / -1;
+    }
+
+    .monitor-list {
+      height: 190px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #07090d;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+    }
+
+    .log-line {
+      display: grid;
+      grid-template-columns: 88px 72px 90px minmax(0, 1fr);
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(39, 49, 64, 0.55);
+      color: var(--muted);
+    }
+
+    .log-line:last-child {
+      border-bottom: 0;
+    }
+
+    .log-line strong {
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .learn-note {
+      min-height: 30px;
+      padding: 7px 9px;
+      border-radius: var(--radius);
+      background: rgba(243, 201, 105, 0.1);
+      color: #f8df9d;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      display: none;
+    }
+
+    .learn-note.visible {
+      display: block;
+    }
+
+    .small {
+      min-height: 30px;
+      padding: 0 9px;
+      font-size: 0.78rem;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    @media (max-width: 1120px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .monitor {
+        grid-column: auto;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .app {
+        width: min(100% - 18px, 1480px);
+      }
+
+      header,
+      .chord-display,
+      .row {
+        grid-template-columns: 1fr;
+      }
+
+      .status-row {
+        justify-content: flex-start;
+      }
+
+      .pads {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .log-line {
+        grid-template-columns: 70px 58px 70px minmax(0, 1fr);
+        gap: 7px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Harmonizer</h1>
+        <div class="subtitle">Intuitive pads for rhythm &amp; bass, keys for harmony &amp; melody — scale-aware, loopable.</div>
+      </div>
+      <div class="status-row">
+        <span id="midiStatus" class="badge">disconnected</span>
+        <button id="enableMidi" class="primary">Enable MIDI</button>
+        <button id="panicTop" class="danger">Panic</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel">
+        <section class="section">
+          <div class="section-title">MIDI</div>
+          <div class="field">
+            <label for="midiInput">Input</label>
+            <select id="midiInput"></select>
+            <div id="keyboardHint" class="sub" style="margin-top:6px;color:var(--muted);font-size:0.75rem;line-height:1.45;display:none"></div>
+          </div>
+          <div class="field">
+            <label for="midiOutput">Output</label>
+            <select id="midiOutput"></select>
+          </div>
+          <div class="button-row">
+            <button id="refreshMidi">Refresh</button>
+            <button id="learnBase">Learn Base</button>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="padNoteMin">Pad Note Min</label>
+              <input id="padNoteMin" type="number" min="0" max="127" value="36">
+            </div>
+            <div class="field">
+              <label for="padNoteMax">Pad Note Max</label>
+              <input id="padNoteMax" type="number" min="0" max="127" value="43">
+            </div>
+          </div>
+          <label class="toggle">
+            <input id="bassFromPadsOnly" type="checkbox" checked>
+            <span>Bass only from pads (keys = harmony/melody)</span>
+          </label>
+          <div class="sub" style="margin-top:6px;color:var(--muted);font-size:0.72rem;line-height:1.4">
+            MPK Mini: set hardware pads to notes 36–43 in MPC Editor to avoid overlapping keys.
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">Harmony</div>
+          <div class="row">
+            <div class="field">
+              <label for="keyRoot">Key</label>
+              <select id="keyRoot"></select>
+            </div>
+            <div class="field">
+              <label for="scale">Scale</label>
+              <select id="scale">
+                <option value="major">Major</option>
+                <option value="naturalMinor">Natural Minor</option>
+                <option value="dorian">Dorian</option>
+                <option value="mixolydian">Mixolydian</option>
+                <option value="harmonicMinor">Harmonic Minor</option>
+                <option value="melodicMinor">Melodic Minor</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="performanceMode">Performance Mode</label>
+            <select id="performanceMode">
+              <option value="harmony-degree">Harmony: Degree</option>
+              <option value="harmony-root">Harmony: Root</option>
+              <option value="melodic">Melodic (scale snap)</option>
+              <option value="split">Split (harmony + melody)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="melodicSnap">Scale Snap</label>
+            <select id="melodicSnap">
+              <option value="strict">Strict (nearest scale tone)</option>
+              <option value="up">Bias up</option>
+              <option value="down">Bias down</option>
+              <option value="passing">Passing (chromatic allowed)</option>
+            </select>
+          </div>
+          <div id="harmonyControls">
+            <div class="row">
+              <div class="field">
+                <label for="inputBaseNote">Base Note</label>
+                <input id="inputBaseNote" type="number" min="0" max="127" step="1">
+              </div>
+              <div class="field">
+                <label for="baseOctave">Base Octave</label>
+                <input id="baseOctave" type="number" min="1" max="6" step="1">
+              </div>
+            </div>
+            <label class="toggle">
+              <input id="wrapDegree" type="checkbox">
+              <span>Wrap degree notes</span>
+            </label>
+            <label class="toggle">
+              <input id="followInputOctave" type="checkbox" checked>
+              <span>Follow input octave</span>
+            </label>
+          </div>
+          <div id="melodicControls" style="display:none">
+            <div class="field" id="splitField" style="display:none">
+              <label for="splitNote">Split Note (MIDI)</label>
+              <input id="splitNote" type="number" min="0" max="127" step="1" value="60">
+            </div>
+            <div class="field">
+              <label for="melodicChannel">Melodic MIDI Ch</label>
+              <input id="melodicChannel" type="number" min="1" max="16" step="1" value="5">
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">Output</div>
+          <div class="toggle-grid">
+            <label class="toggle">
+              <input id="internalSound" type="checkbox">
+              <span>Internal</span>
+            </label>
+            <label class="toggle">
+              <input id="midiOutEnabled" type="checkbox">
+              <span>MIDI Out</span>
+            </label>
+            <label class="toggle">
+              <input id="layerBass" type="checkbox">
+              <span id="layerBassLabel">Bass</span>
+            </label>
+            <label class="toggle">
+              <input id="layerPad" type="checkbox">
+              <span>Pad</span>
+            </label>
+            <label class="toggle">
+              <input id="layerArp" type="checkbox">
+              <span id="layerArpLabel">Arp</span>
+            </label>
+            <label class="toggle">
+              <input id="layerKeys" type="checkbox">
+              <span>Keys</span>
+            </label>
+          </div>
+          <div class="sub" style="margin-top:8px;color:var(--muted);font-size:0.78rem;line-height:1.4">
+            MIDI Out: Ch1 Keys, Ch2 Bass, Ch3 Arp, Ch4 Pad, Ch5 Melodic, Ch10 Drums
+          </div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <div class="panel">
+          <section class="section play-zones">
+            <div class="zone zone-pads">
+              <div class="zone-title">
+                <span>Pads</span>
+                <span>Drums + bass — MPK pads / keys 1–8</span>
+              </div>
+              <div class="pad-section">
+                <div class="pad-section-label">Drums</div>
+                <div id="drumPads" class="pads"></div>
+              </div>
+              <div class="pad-section">
+                <div class="pad-section-label">Bass roots</div>
+                <div id="bassPads" class="pads"></div>
+              </div>
+            </div>
+            <div class="zone zone-keys">
+              <div class="zone-title">
+                <span>Keys</span>
+                <span>Harmony + melody — keyboard / MPK keys</span>
+              </div>
+              <div id="keyPads" class="pads keys-grid"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="panel">
+          <section class="section">
+            <div class="section-title">Looper</div>
+            <div class="row">
+              <div class="field">
+                <label for="looperBpm">BPM</label>
+                <input id="looperBpm" type="number" min="40" max="200" step="1" value="92">
+              </div>
+              <div class="field">
+                <label for="looperBars">Bars</label>
+                <select id="looperBars">
+                  <option value="2">2</option>
+                  <option value="4" selected>4</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+            </div>
+            <div class="button-row">
+              <button id="looperRecord" class="danger">Record</button>
+              <button id="looperPlay">Play</button>
+              <button id="looperStop" class="ghost">Stop</button>
+              <button id="looperClear" class="ghost">Clear All</button>
+            </div>
+            <div class="looper-bar">
+              <div id="looperTrackDrums" class="looper-track armed">Drums 0</div>
+              <div id="looperTrackBass" class="looper-track armed">Bass 0</div>
+              <div id="looperTrackHarmony" class="looper-track armed">Harmony 0</div>
+              <div id="looperTrackMelody" class="looper-track armed">Melody 0</div>
+            </div>
+            <div id="looperPosition" class="sub" style="margin-top:8px;color:var(--accent);font-size:0.82rem;font-family:var(--mono)">Bar 1/4 · Beat 1 · Loop 1</div>
+            <div class="sub" style="margin-top:6px;color:var(--muted);font-size:0.75rem;line-height:1.45">
+              Record captures hits into armed tracks. Play loops continuously for the full bar count (e.g. 4 bars ≈ 10s at 92 BPM). Stop record to keep looping playback.
+            </div>
+          </section>
+        </div>
+
+        <div class="panel">
+          <section class="section">
+            <div class="section-title">Current Chord</div>
+            <div class="chord-display">
+              <div class="readout">
+                <div class="label">Function</div>
+                <div id="functionName" class="main">--</div>
+                <div id="realName" class="sub">Waiting for input</div>
+              </div>
+              <div class="readout">
+                <div class="label">Generated Notes</div>
+                <div id="noteCount" class="main">0 notes</div>
+                <div id="noteNames" class="sub">--</div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="panel">
+          <section class="section">
+            <div class="section-title">Last MIDI Input</div>
+            <div class="chord-display triple">
+              <div class="readout">
+                <div class="label">Message</div>
+                <div id="lastType" class="main">--</div>
+                <div id="lastChannel" class="sub">Channel --</div>
+              </div>
+              <div class="readout">
+                <div class="label">Data</div>
+                <div id="lastData" class="main">--</div>
+                <div id="lastValue" class="sub">Velocity/value --</div>
+              </div>
+              <div class="readout">
+                <div class="label">Remapped</div>
+                <div id="lastRemap" class="main">--</div>
+                <div class="sub">Input to output</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <section class="section">
+          <div class="section-title">Performance</div>
+          <div id="rangeControls"></div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">Velocity</div>
+          <label class="toggle">
+            <input id="velocityClamp" type="checkbox" checked>
+            <span>Clamp &amp; compress velocity</span>
+          </label>
+          <div class="sub" style="margin-top:6px;color:var(--muted);font-size:0.78rem;line-height:1.4">
+            Limits dynamic range from the keys. Vel Min/Max cap the output; Compress pulls hits toward the middle.
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">Controller (MPK Mini)</div>
+          <div class="button-row">
+            <button id="loadMpkMini" class="small primary">Load MPK Mini Preset</button>
+          </div>
+          <div class="field">
+            <label for="pitchBendRange">Pitch Bend Range (semitones)</label>
+            <input id="pitchBendRange" type="number" min="0" max="12" step="1" value="2">
+          </div>
+          <label class="toggle">
+            <input id="modToMidiOut" type="checkbox">
+            <span>Forward pitch bend to MIDI Out</span>
+          </label>
+          <div id="modReadout" class="sub" style="margin-top:8px;color:var(--muted);font-size:0.75rem;line-height:1.45;font-family:var(--mono)">filter -- / reverb --</div>
+          <div class="sub" style="margin-top:6px;color:var(--muted);font-size:0.75rem;line-height:1.45">
+            Preset: Stick Y / mod → vibrato (CC1). K1–K8 → filter, reverb, spread, complexity, humanize, arp rate, tremolo, strum (CC70–77). Joystick X → pitch bend on all layers.
+          </div>
+          <div class="button-row" style="margin-top:8px">
+            <button class="small" data-learn-param="filter">Learn Filter</button>
+            <button class="small" data-learn-param="reverb">Learn Reverb</button>
+            <button class="small" data-learn-param="vibrato">Learn Vibrato</button>
+            <button class="small" data-learn-param="tremolo">Learn Tremolo</button>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">Modes</div>
+          <div class="field">
+            <label for="arpPattern">Arp Pattern</label>
+            <select id="arpPattern">
+              <option value="up">Up</option>
+              <option value="down">Down</option>
+              <option value="upDown">Up Down</option>
+              <option value="random">Random</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="arpSource">Arp Source</label>
+            <select id="arpSource">
+              <option value="chord">Chord tones</option>
+              <option value="scale">Scale tones</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="waveform">Internal Wave</label>
+            <select id="waveform">
+              <option value="triangle">Triangle</option>
+              <option value="sine">Sine</option>
+              <option value="sawtooth">Saw</option>
+              <option value="square">Square</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-title">MIDI Learn</div>
+          <div id="learnStatus" class="learn-note"></div>
+          <div class="button-row">
+            <button class="small" data-learn-action="toggleInternal">Internal</button>
+            <button class="small" data-learn-action="toggleMidiOut">MIDI Out</button>
+            <button class="small" data-learn-action="toggleBass">Bass</button>
+            <button class="small" data-learn-action="toggleArp">Arp</button>
+            <button class="small" data-learn-action="togglePad">Pad</button>
+            <button class="small" data-learn-action="panic">Panic</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="panel monitor">
+        <section class="section">
+          <div class="section-title">
+            <span>MIDI Monitor</span>
+            <span class="button-row three">
+              <button id="panicBottom" class="small danger">Panic</button>
+              <button id="allNotesOff" class="small">All Off</button>
+              <button id="clearLog" class="small ghost">Clear</button>
+            </span>
+          </div>
+          <div id="monitor" class="monitor-list"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/utils.js"></script>
+  <script src="js/theory.js"></script>
+  <script src="js/voicing.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/drums.js"></script>
+  <script src="js/looper.js"></script>
+  <script src="js/keyboard.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
